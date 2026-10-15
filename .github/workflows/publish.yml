@@ -1,0 +1,72 @@
+# Builds the Venga Windows app from the private discord-venga code and publishes it here.
+# Started when discord-venga's release workflow pushes a version tag (v0.3.0) to this repo.
+#
+# This page is public, and so are these logs. So the build prints nothing about the code:
+# its output goes to a file that is never uploaded, and it runs no tests (discord-venga's ci
+# already ran them, privately). If the build fails, run the same build in discord-venga to see why.
+name: publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version to build again, like v0.3.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Check the version name
+        shell: pwsh
+        run: if ($env:TAG -notmatch '^v\d+\.\d+\.\d+$') { throw "Not a version tag: $env:TAG" }
+      - name: Get the code (read-only key for discord-venga)
+        uses: actions/checkout@v4
+        with:
+          repository: marcelormendes/discord-venga
+          ref: ${{ env.TAG }}
+          ssh-key: ${{ secrets.VENGA_SOURCE_KEY }}
+          persist-credentials: false
+          path: src
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build the installer (output kept private)
+        shell: pwsh
+        working-directory: src/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'build.log'
+          npm ci *> $log
+          if ($LASTEXITCODE -ne 0) { throw 'Installing the build tools failed. Run the build in discord-venga to see why.' }
+          npm run dist:win *> $log
+          if ($LASTEXITCODE -ne 0) { throw 'The build failed. Run the build in discord-venga to see why.' }
+          Remove-Item $log
+          Write-Host 'Built.'
+      - name: Check the files
+        shell: pwsh
+        working-directory: src/desktop/release
+        run: |
+          $version = $env:TAG.Substring(1)
+          foreach ($f in "Venga-Setup-$version.exe", "Venga-Setup-$version.exe.blockmap", 'latest.yml') {
+            if (-not (Test-Path $f)) { throw "$f is missing" }
+          }
+          if ((Get-Content latest.yml -Raw) -notmatch "version: $([regex]::Escape($version))") { throw 'latest.yml has the wrong version' }
+          Get-ChildItem "Venga-Setup-$version.exe*", latest.yml | ForEach-Object { Write-Host "$($_.Name) ($([math]::Round($_.Length / 1MB, 1)) MB)" }
+      - name: Publish
+        shell: pwsh
+        working-directory: src/desktop/release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:TAG.Substring(1)
+          $notes = "Download **Venga-Setup-$version.exe** and run it. If Windows says ""Windows protected your PC"", click **More info**, then **Run anyway**.`n`nAlready have Venga 0.3.0 or newer? It updates itself."
+          gh release create $env:TAG "Venga-Setup-$version.exe" "Venga-Setup-$version.exe.blockmap" latest.yml --repo $env:GITHUB_REPOSITORY --title "Venga $env:TAG" --notes $notes
