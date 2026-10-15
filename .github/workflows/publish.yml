@@ -26,7 +26,8 @@ jobs:
     steps:
       - name: Check the version name
         shell: pwsh
-        run: if ($env:TAG -notmatch '^v\d+\.\d+\.\d+$') { throw "Not a version tag: $env:TAG" }
+        run: |
+          if ($env:TAG -notmatch '^v\d+\.\d+\.\d+$') { throw "Not a version tag: $env:TAG" }
       - name: Get the code (read-only key for discord-venga)
         uses: actions/checkout@v4
         with:
