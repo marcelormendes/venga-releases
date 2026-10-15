@@ -51,6 +51,8 @@ jobs:
           npm ci *> $log
           if ($LASTEXITCODE -ne 0) { Show-Steps; throw 'Installing the build tools failed. Run the build in discord-venga to see why.' }
           npm run dist:win *> $log
+          # One more try, in case a download failed for a moment.
+          if ($LASTEXITCODE -ne 0) { Write-Host 'The build failed; trying once more.'; npm run dist:win *> $log }
           if ($LASTEXITCODE -ne 0) { Show-Steps; throw 'The build failed. Run the build in discord-venga to see why.' }
           Remove-Item $log
           Write-Host 'Built.'
