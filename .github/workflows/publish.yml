@@ -46,10 +46,12 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'build.log'
+          # On failure, show only the step names and the tools' own one-line errors: never code.
+          function Show-Steps { Get-Content $log | Select-String -Pattern '^(> |\s*•|\s*⨯|Built |Downloading |npm error (code|path|command) )' | ForEach-Object { $_.Line } }
           npm ci *> $log
-          if ($LASTEXITCODE -ne 0) { throw 'Installing the build tools failed. Run the build in discord-venga to see why.' }
+          if ($LASTEXITCODE -ne 0) { Show-Steps; throw 'Installing the build tools failed. Run the build in discord-venga to see why.' }
           npm run dist:win *> $log
-          if ($LASTEXITCODE -ne 0) { throw 'The build failed. Run the build in discord-venga to see why.' }
+          if ($LASTEXITCODE -ne 0) { Show-Steps; throw 'The build failed. Run the build in discord-venga to see why.' }
           Remove-Item $log
           Write-Host 'Built.'
       - name: Check the files
